@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meetify AI Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet"/>
+  <style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+
+  <main class="flex-grow max-w-4xl mx-auto px-4 py-8 flex flex-col">
+    <section class="flex flex-col flex-grow bg-white rounded-lg shadow-md p-6">
+      <div class="flex-grow overflow-y-auto space-y-4 mb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100" id="chat-container" style="min-height: 300px;">
+        <div class="flex items-start space-x-3">
+          <img alt="AI assistant avatar" class="w-10 h-10 rounded-full" src="https://placehold.co/40x40/png?text=AI"/>
+          <div class="bg-gray-100 text-gray-800 rounded-lg px-4 py-3 max-w-[80%]">
+            Hello! Ask me anything and I will do my best to help you.
+          </div>
+        </div>
+      </div>
+      <form class="flex space-x-3" id="chat-form">
+        <textarea id="user-input" placeholder="Type your question..." required
+          class="flex-grow resize-none rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none px-4 py-3 text-gray-700"></textarea>
+        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-3 flex items-center justify-center transition">
+          <i class="fas fa-paper-plane"></i>
+        </button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="bg-white border-t border-gray-200 py-4 mt-8">
+    <div class="max-w-4xl mx-auto px-4 text-center text-gray-500 text-sm">
+      © 2025 Meetify AI Chat. All rights reserved.
+    </div>
+  </footer>
+
+  <script>
+    const chatContainer = document.getElementById('chat-container');
+    const chatForm = document.getElementById('chat-form');
+    const userInput = document.getElementById('user-input');
+
+    function createMessageElement(message, sender = 'user') {
+      const wrapper = document.createElement('div');
+      wrapper.classList.add('flex', 'items-start', 'space-x-3');
+      if(sender === 'user') {
+        wrapper.classList.add('justify-end');
+        wrapper.innerHTML = `
+          <div class="bg-blue-600 text-white rounded-lg px-4 py-3 max-w-[80%] whitespace-pre-wrap break-words">${message}</div>
+          <img src="https://placehold.co/40x40/png?text=You" class="w-10 h-10 rounded-full"/>
+        `;
+      } else {
+        wrapper.innerHTML = `
+          <img src="https://placehold.co/40x40/png?text=AI" class="w-10 h-10 rounded-full"/>
+          <div class="bg-gray-100 text-gray-800 rounded-lg px-4 py-3 max-w-[80%] whitespace-pre-wrap break-words">${message}</div>
+        `;
+      }
+      return wrapper;
+    }
+
+    chatForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const message = userInput.value.trim();
+      if(!message) return;
+
+      chatContainer.appendChild(createMessageElement(message, 'user'));
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+      userInput.value = '';
+      userInput.disabled = true;
+
+      const loadingEl = createMessageElement('...', 'ai');
+      chatContainer.appendChild(loadingEl);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+        const data = await res.json();
+        loadingEl.querySelector('div').textContent = data.reply;
+      } catch(err) {
+        loadingEl.querySelector('div').textContent = 'Error: Could not get response from AI.';
+        console.error(err);
+      }
+
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+      userInput.disabled = false;
+      userInput.focus();
+    });
+
+    userInput.addEventListener('input', () => {
+      userInput.style.height = 'auto';
+      userInput.style.height = userInput.scrollHeight + 'px';
+    });
+  </script>
+</body>
+</html>
