@@ -1,33 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Meetify AI Chat</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet"/>
-  <style>body { font-family: 'Inter', sans-serif; }</style>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .typing::after {
+      content: '⠋';
+      animation: dots 1s steps(1, end) infinite;
+      margin-left: .5rem;
+    }
+    @keyframes dots {
+      0% { content: '⠋'; }
+      20% { content: '⠙'; }
+      40% { content: '⠹'; }
+      60% { content: '⠸'; }
+      80% { content: '⠼'; }
+      100% { content: '⠴'; }
+    }
+  </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex flex-col">
 
   <main class="flex-grow max-w-4xl mx-auto px-4 py-8 flex flex-col">
     <section class="flex flex-col flex-grow bg-white rounded-lg shadow-md p-6">
-      <div class="flex-grow overflow-y-auto space-y-4 mb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100" id="chat-container" style="min-height: 300px;">
+      <div id="chat-container"
+           class="flex-grow overflow-y-auto space-y-4 mb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
+           style="min-height: 300px;">
         <div class="flex items-start space-x-3">
-          <img alt="AI assistant avatar" class="w-10 h-10 rounded-full" src="https://placehold.co/40x40/png?text=AI"/>
+          <img alt="AI avatar" class="w-10 h-10 rounded-full" src="https://placehold.co/40x40/png?text=AI"/>
           <div class="bg-gray-100 text-gray-800 rounded-lg px-4 py-3 max-w-[80%]">
             Hello! Ask me anything and I will do my best to help you.
           </div>
         </div>
       </div>
-      <form class="flex space-x-3" id="chat-form">
+
+      <form id="chat-form" class="flex space-x-3">
         <textarea id="user-input" placeholder="Type your question..." required
           class="flex-grow resize-none rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none px-4 py-3 text-gray-700"></textarea>
-        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-3 flex items-center justify-center transition">
+        <button type="submit"
+          class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-3 flex items-center justify-center transition">
           <i class="fas fa-paper-plane"></i>
         </button>
       </form>
+
+      <!-- Küçük bir hata/uyarı alanı -->
+      <div id="alert" class="hidden mt-3 text-sm text-red-600"></div>
     </section>
   </main>
 
@@ -41,37 +63,77 @@
     const chatContainer = document.getElementById('chat-container');
     const chatForm = document.getElementById('chat-form');
     const userInput = document.getElementById('user-input');
+    const alertBox = document.getElementById('alert');
+
+    function showAlert(msg) {
+      alertBox.textContent = msg;
+      alertBox.classList.remove('hidden');
+      setTimeout(() => alertBox.classList.add('hidden'), 4000);
+    }
 
     function createMessageElement(message, sender = 'user') {
       const wrapper = document.createElement('div');
       wrapper.classList.add('flex', 'items-start', 'space-x-3');
-      if(sender === 'user') {
+      if (sender === 'user') {
         wrapper.classList.add('justify-end');
         wrapper.innerHTML = `
           <div class="bg-blue-600 text-white rounded-lg px-4 py-3 max-w-[80%] whitespace-pre-wrap break-words">${message}</div>
-          <img src="https://placehold.co/40x40/png?text=You" class="w-10 h-10 rounded-full"/>
+          <img src="https://placehold.co/40x40/png?text=You" alt="You" class="w-10 h-10 rounded-full"/>
         `;
       } else {
         wrapper.innerHTML = `
-          <img src="https://placehold.co/40x40/png?text=AI" class="w-10 h-10 rounded-full"/>
+          <img src="https://placehold.co/40x40/png?text=AI" alt="AI" class="w-10 h-10 rounded-full"/>
           <div class="bg-gray-100 text-gray-800 rounded-lg px-4 py-3 max-w-[80%] whitespace-pre-wrap break-words">${message}</div>
         `;
       }
       return wrapper;
     }
 
+    function createTypingElement() {
+      const wrapper = document.createElement('div');
+      wrapper.classList.add('flex', 'items-start', 'space-x-3');
+      wrapper.innerHTML = `
+        <img src="https://placehold.co/40x40/png?text=AI" alt="AI" class="w-10 h-10 rounded-full"/>
+        <div class="bg-gray-100 text-gray-800 rounded-lg px-4 py-3 max-w-[80%] typing">typing</div>
+      `;
+      return wrapper;
+    }
+
+    function extractReply(data) {
+      // Beklenen: { reply: "..." }
+      if (data && typeof data.reply === 'string' && data.reply.trim() !== '') {
+        return data.reply.trim();
+      }
+      // Bazı backend’ler farklı alanlar ile dönebilir (diagnostic amaçlı)
+      if (data?.response?.text) {
+        try { const t = data.response.text(); if (t && t.trim()) return t.trim(); } catch(e){}
+      }
+      if (data?.response?.candidates?.length) {
+        const cand = data.response.candidates[0];
+        const part = cand?.content?.parts?.[0]?.text;
+        if (part && part.trim()) return part.trim();
+      }
+      return ''; // fallback
+    }
+
     chatForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const message = userInput.value.trim();
-      if(!message) return;
+      alertBox.classList.add('hidden');
 
+      const message = userInput.value.trim();
+      if (!message) return;
+
+      // Kullanıcı mesajını ekle
       chatContainer.appendChild(createMessageElement(message, 'user'));
       chatContainer.scrollTop = chatContainer.scrollHeight;
+
+      // Input kilitle
       userInput.value = '';
       userInput.disabled = true;
 
-      const loadingEl = createMessageElement('...', 'ai');
-      chatContainer.appendChild(loadingEl);
+      // "Yazıyor..." balonu
+      const typingEl = createTypingElement();
+      chatContainer.appendChild(typingEl);
       chatContainer.scrollTop = chatContainer.scrollHeight;
 
       try {
@@ -80,18 +142,43 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message })
         });
-        const data = await res.json();
-        loadingEl.querySelector('div').textContent = data.reply;
-      } catch(err) {
-        loadingEl.querySelector('div').textContent = 'Error: Could not get response from AI.';
-        console.error(err);
-      }
 
-      chatContainer.scrollTop = chatContainer.scrollHeight;
-      userInput.disabled = false;
-      userInput.focus();
+        let data;
+        try {
+          data = await res.json();
+        } catch (jsonErr) {
+          // JSON parse hatası → metin gövdesini alalım
+          const raw = await res.text();
+          console.error('Non-JSON response:', raw);
+          throw new Error('Server returned non-JSON response');
+        }
+
+        if (!res.ok) {
+          const errMsg = (data && (data.error || data.message)) || 'Server error';
+          throw new Error(errMsg);
+        }
+
+        // Güvenli çıkarım
+        const reply = extractReply(data) || '⚠️ AI did not return a response.';
+        typingEl.querySelector('div').classList.remove('typing');
+        typingEl.querySelector('div').textContent = reply;
+
+        // Debug için görmek istersen:
+        console.log('API response JSON:', data);
+
+      } catch (err) {
+        console.error(err);
+        typingEl.querySelector('div').classList.remove('typing');
+        typingEl.querySelector('div').textContent = 'Error: Could not get response from AI.';
+        showAlert(err.message || 'Request failed');
+      } finally {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        userInput.disabled = false;
+        userInput.focus();
+      }
     });
 
+    // Auto-resize textarea
     userInput.addEventListener('input', () => {
       userInput.style.height = 'auto';
       userInput.style.height = userInput.scrollHeight + 'px';
